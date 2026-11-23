@@ -1,1 +1,108 @@
+javascript
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const path = require("path");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+const PORT = process.env.PORT || 3000;
+const MAX_PLAYERS = 50;
+const DAY_LENGTH_MS = 24 * 60 * 1000; // 24 menit = 1 hari
+
+// ===== State game =====
+const players = new Map(); // socketId -> data pemain
+let dayStartTime = Date.now();
+let dayNumber = 1;
+let stormActive = false;
+let stormTimeoutId = null;
+
+// Tampilkan index.html
+app.use(express.static(path.join(__dirname, "public")));
+
+// ===== Siklus hari =====
+function startNewDay() {
+  dayStartTime = Date.now();
+  stormActive = false;
+  io.emit("day:start", { day: dayNumber, length: DAY_LENGTH_MS });
+  scheduleStorm();
+}
+
+// Badai muncul acak di dalam satu hari (antara 2 sampai 20 menit)
+function scheduleStorm() {
+  const minDelay = 2 * 60 * 1000;
+  const maxDelay = 20 * 60 * 1000;
+  const delay = minDelay + Math.random() * (maxDelay - minDelay);
+  if (stormTimeoutId) clearTimeout(stormTimeoutId);
+  stormTimeoutId = setTimeout(startStorm, delay);
+}
+
+function startStorm() {
+  stormActive = true;
+  io.emit("storm:start", { day: dayNumber, duration: 3 * 60 * 1000 });
+  console.log(`Badai asap dimulai di hari ${dayNumber}`);
+
+  // Badai berlangsung 3 menit
+  setTimeout(() => {
+    stormActive = false;
+    io.emit("storm:end", { day: dayNumber });
+  }, 3 * 60 * 1000);
+}
+
+// Cek pergantian hari setiap detik
+setInterval(() => {
+  const elapsed = Date.now() - dayStartTime;
+  if (elapsed >= DAY_LENGTH_MS) {
+    dayNumber++;
+    startNewDay();
+  }
+  // Kirim sisa waktu hari ke semua pemain
+  io.emit("time:tick", {
+    day: dayNumber,
+    remaining: DAY_LENGTH_MS - (Date.now() - dayStartTime),
+    stormActive,
+  });
+}, 1000);
+
+// ===== Koneksi pemain =====
+io.on("connection", (socket) => {
+  if (players.size >= MAX_PLAYERS) {
+    socket.emit("server:full", { max: MAX_PLAYERS });
+    socket.disconnect(true);
+    return;
+  }
+
+  players.set(socket.id, {
+    id: socket.id,
+    name: `Survivor-${socket.id.slice(0, 4)}`,
+    joinedAt: Date.now(),
+  });
+
+  console.log(`Pemain masuk: ${socket.id} (total ${players.size}/${MAX_PLAYERS})`);
+
+  socket.emit("welcome", {
+    id: socket.id,
+    day: dayNumber,
+    stormActive,
+    players: players.size,
+    maxPlayers: MAX_PLAYERS,
+  });
+
+  io.emit("players:count", { count: players.size, max: MAX_PLAYERS });
+
+  socket.on("disconnect", () => {
+    players.delete(socket.id);
+    console.log(`Pemain keluar: ${socket.id} (total ${players.size})`);
+    io.emit("players:count", { count: players.size, max: MAX_PLAYERS });
+  });
+});
+
+// ===== Jalankan server =====
+server.listen(PORT, () => {
+  console.log(`Server jalan di port ${PORT}`);
+  startNewDay();
+});
+```
 
