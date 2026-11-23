@@ -1,1 +1,73 @@
+html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Survival Kristal - Tes Tahap 1</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body {
+      background: #111;
+      color: #eee;
+      font-family: sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    .box {
+      border: 1px solid #444;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 12px auto;
+      max-width: 400px;
+    }
+    .storm { color: #ff5050; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>Survival Kristal</h2>
+  <div class="box">
+    <div>Hari: <span id="day">-</span></div>
+    <div>Sisa waktu hari ini: <span id="remaining">-</span></div>
+    <div>Pemain online: <span id="count">-</span></div>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const socket = io();
+
+    socket.on("welcome", (d) => {
+      document.getElementById("day").textContent = d.day;
+      document.getElementById("status").textContent = "Terhubung ke server";
+    });
+
+    socket.on("server:full", (d) => {
+      document.getElementById("status").textContent =
+        `Server penuh (maks ${d.max} pemain)`;
+    });
+
+    socket.on("players:count", (d) => {
+      document.getElementById("count").textContent = `${d.count}/${d.max}`;
+    });
+
+    socket.on("time:tick", (d) => {
+      document.getElementById("day").textContent = d.day;
+      const m = Math.floor(d.remaining / 60000);
+      const s = Math.floor((d.remaining % 60000) / 1000);
+      document.getElementById("remaining").textContent =
+        `${m}:${String(s).padStart(2, "0")}`;
+    });
+
+    socket.on("storm:start", () => {
+      document.getElementById("status").innerHTML =
+        '<span class="storm">BADAI ASAP GELAP DATANG!</span>';
+    });
+
+    socket.on("storm:end", () => {
+      document.getElementById("status").textContent = "Badai sudah reda";
+    });
+  </script>
+</body>
+</html>
+```
 
